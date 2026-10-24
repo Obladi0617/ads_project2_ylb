@@ -11,6 +11,7 @@ The implementation is written in C style in src/1.c and uses only standard C hea
 
 ## Directory layout
 
+- report_dijkstra_heaps.tex and report_dijkstra_heaps.pdf: English report source and compiled PDF, following the Project 1 layout.
 - src/1.c: graph loading, four heaps, Dijkstra, benchmark timing, and heap-operation counters.
 - data/dimacs/: the NY, COL, and FLA road-network inputs and their provenance.
 - scripts/plot_benchmark.py: plots the measured runtimes.
