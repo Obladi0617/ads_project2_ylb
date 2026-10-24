@@ -18,6 +18,7 @@ The implementation is written in C style in src/1.c and uses only standard C hea
 - build/: the locally compiled executable.
 - docs/实验记录.md: project history, current measurements, and handoff notes.
 - docs/BENCHMARK_NOTES.md: benchmark methodology and detailed analysis.
+- docs/heap_performance_analysis.md: measured comparison of all four heaps, with the supporting timing and operation-count data.
 
 ## Build and run
 
