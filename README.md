@@ -7,7 +7,7 @@ This project compares Dijkstra's shortest-path algorithm with four min-priority-
 - Fibonacci heap
 - Binomial heap
 
-The implementation is written in C style in src/1.c and compiled with g++ in C++17 mode because the source keeps the bits/stdc++.h header.
+The implementation is written in C style in src/1.c and uses only standard C headers, so it builds either with g++ in C++17 mode or with gcc in C11 mode.
 
 ## Directory layout
 
@@ -26,6 +26,10 @@ Run these commands from the project root:
     g++ -std=c++17 -O2 .\src\1.c -o .\build\dijkstra_benchmark.exe
     .\build\dijkstra_benchmark.exe
 
+With MinGW gcc, compile as C11 and enable ANSI stdio for the `%lld` format used by the CSV writer:
+
+    gcc -std=c11 -O2 -D__USE_MINGW_ANSI_STDIO=1 .\src\1.c -o .\build\dijkstra_benchmark.exe
+
 The benchmark runs 1,000 source-target queries on each of NY, COL, and FLA with all four heaps. It writes the timing and high-level work CSV files under results/. Query answers are recorded so the implementations can be checked against one another.
 
 To regenerate the runtime plot from the timing CSV:
@@ -43,11 +47,14 @@ The plot is saved as results/benchmark_runtime.png.
 
 ## Counting heap operations
 
-Run a separate count-only pass with:
+Heap-operation counters are compiled out of the timing build. To collect them, build the separate counting binary and run its count-only pass:
 
-    .\build\dijkstra_benchmark.exe --count-heap-ops
+    g++ -std=c++17 -O2 -DCOUNT_HEAP_OPS .\src\1.c -o .\build\dijkstra_benchmark_count.exe
+    .\build\dijkstra_benchmark_count.exe --count-heap-ops
 
-This checks the answers again and writes results/heap_internal_stats.csv. It does not overwrite the timing CSV files. Counter collection is separate from the timed pass, so its overhead is not included in benchmark_results.csv.
+The timing binary rejects `--count-heap-ops` and asks for the `-DCOUNT_HEAP_OPS` build.
+
+The counting pass checks the answers again and writes results/heap_internal_stats.csv. It does not overwrite the timing CSV files. Counter collection is separate from the timed pass, so its overhead is not included in benchmark_results.csv.
 
 Each row in heap_internal_stats.csv summarizes one heap on one dataset across the 1,000 queries. The columns mean:
 
