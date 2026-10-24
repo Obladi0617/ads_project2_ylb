@@ -1,6 +1,3 @@
-# DIMACS graph inputs are referenced by download links and are not committed.
-data/dimacs/*.gr
-
 # Locally compiled executable; keep the directory available for fresh clones.
 build/*
 !build/.gitkeep
