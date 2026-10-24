@@ -306,8 +306,38 @@ g++ -std=c++17 -O2 -DCOUNT_HEAP_OPS .\src\1.c -o .\build\dijkstra_benchmark_coun
 
 ### 9.2 优化版（NY / COL / FLA，1000 查询）
 
-> 全量运行完成后补充三张图的实际时间、相对基线的变化，以及对应的
-> `results/benchmark_results.csv` 和 `results/benchmark_runtime.png`。
+同一台机器、同一编译环境（Windows 11，MinGW g++ 8.1.0，`-O2`，单线程）下的
+优化版全量结果：
+
+| 图 | 点数 | 弧数 | Binary | Ternary | Fibonacci | Binomial | 答案一致 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| NY | 264,346 | 733,846 | 26.373 s | 27.077 s | 61.607 s | 39.764 s | 1000/1000 |
+| COL | 435,666 | 1,057,066 | 45.077 s | 43.880 s | 98.328 s | 66.029 s | 1000/1000 |
+| FLA | 1,070,376 | 2,712,798 | 108.990 s | 119.341 s | 277.698 s | 172.555 s | 1000/1000 |
+
+与 9.1 的同机 NY 基线相比：
+
+| 堆 | 基线 | 优化后 | 变化 |
+|---|---:|---:|---:|
+| Binary | 27.020 s | 26.373 s | −2.4% |
+| Ternary | 28.443 s | 27.077 s | −4.8% |
+| Fibonacci | 68.906 s | 61.607 s | −10.6% |
+| Binomial | 43.290 s | 39.764 s | −8.1% |
+| 合计 | 167.659 s | 154.821 s | −7.7% |
+
+Fibonacci 的降幅最大，与改动一（去掉每次 extract-min 的整表扫描）和改动四
+（堆操作内联）的预期一致；Binary/Ternary 的降幅较小，因为它们的主要开销在
+CSR 扫描和 `dist[]` 访问上，堆本身的操作不是瓶颈。
+
+关于绝对值：仓库中原有的 `results/benchmark_results.csv` 记录为
+NY 9.752 s、COL 15.880 s、FLA 40.315 s，而同一份改动前代码在本机 NY 实测
+27.020 s，两者相差约 2.8 倍，说明原数据不是在本机（或不是在同一负载下）测得的。
+跨机器的绝对时间不可比，本报告只使用同机基线做前后对比。COL 和 FLA 没有
+保留改动前的同机基线，因此表中只列优化后的绝对值，不计算相对变化。
+
+对应的数据文件为 `results/benchmark_results.csv`、`results/benchmark_queries.csv`、
+`results/benchmark_operations.csv`，图由 `scripts/plot_benchmark.py` 生成到
+`results/benchmark_runtime.png`。
 
 ---
 
