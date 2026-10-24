@@ -1,4 +1,8 @@
-#include<bits/stdc++.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <limits.h>
+#include <time.h>
 
 #define DIST_INF (LLONG_MAX/4)
 
@@ -74,20 +78,6 @@ typedef struct BinomialHeap{
     int node_count;
 }BinomialHeap;
 
-typedef struct MinPQ{
-    void *heap;
-    int (*empty)(void *);
-    int (*insert)(void *,int,long long);
-    int (*extract_min)(void *,HeapItem *);
-    int (*decrease_key)(void *,int,long long);
-    int (*clear)(void *,const int *,int);
-}MinPQ;
-
-typedef struct DijkstraResult{
-    long long *dist;
-    int *parent;
-}DijkstraResult;
-
 typedef struct DijkstraWorkspace{
     long long *dist;
     unsigned char *state;
@@ -122,6 +112,10 @@ typedef struct HeapInternalStats{
     long long max_degree;
 }HeapInternalStats;
 
+/* Internal heap counters are compiled only into the counting build
+   (-DCOUNT_HEAP_OPS). The timing build expands both macros to nothing,
+   so no counter check or update sits in the measured path. */
+#ifdef COUNT_HEAP_OPS
 static HeapInternalStats *active_heap_metrics=NULL;
 
 #define METRIC_ADD(field,value) do{ \
@@ -136,6 +130,10 @@ static HeapInternalStats *active_heap_metrics=NULL;
         active_heap_metrics->field=(long long)(value); \
     } \
 }while(0)
+#else
+#define METRIC_ADD(field,value) do{}while(0)
+#define METRIC_MAX(field,value) do{}while(0)
+#endif
 
 typedef struct Query{
     int source;
@@ -536,27 +534,29 @@ static void ternary_sift_up(TernaryHeap *heap,int i){
     }
 }
 
-/* Children of i are 3*i+1, 3*i+2, and 3*i+3. */
+/* Children of i are 3*i+1, 3*i+2, and 3*i+3. The heap never holds more
+   than n entries, and 3*n stays far inside int range for these graphs,
+   so 32-bit child arithmetic is safe and avoids 64-bit index math. */
 static void ternary_sift_down(TernaryHeap *heap,int i){
     while(1){
         METRIC_ADD(downward_iterations,1);
-        long long first_child=3LL*i+1;
+        int first_child=3*i+1;
         int smallest=i;
 
         if(first_child<heap->size&&
-           heap_item_less(&heap->items[(int)first_child],
+           heap_item_less(&heap->items[first_child],
                           &heap->items[smallest])){
-            smallest=(int)first_child;
+            smallest=first_child;
         }
         if(first_child+1<heap->size&&
-           heap_item_less(&heap->items[(int)(first_child+1)],
+           heap_item_less(&heap->items[first_child+1],
                           &heap->items[smallest])){
-            smallest=(int)(first_child+1);
+            smallest=first_child+1;
         }
         if(first_child+2<heap->size&&
-           heap_item_less(&heap->items[(int)(first_child+2)],
+           heap_item_less(&heap->items[first_child+2],
                           &heap->items[smallest])){
-            smallest=(int)(first_child+2);
+            smallest=first_child+2;
         }
         if(smallest==i){
             break;
@@ -676,8 +676,10 @@ static BinomialNode *binomial_merge_roots(BinomialNode *a,
                                           BinomialNode *b){
     BinomialNode dummy;
     BinomialNode *tail=&dummy;
-    int merged_root_count=0;
     dummy.sibling=NULL;
+#ifdef COUNT_HEAP_OPS
+    int merged_root_count=0;
+#endif
 
     while(a!=NULL&&b!=NULL){
         METRIC_ADD(root_list_steps,1);
@@ -689,16 +691,25 @@ static BinomialNode *binomial_merge_roots(BinomialNode *a,
             b=b->sibling;
         }
         tail=tail->sibling;
+#ifdef COUNT_HEAP_OPS
         merged_root_count++;
+#endif
     }
 
     tail->sibling=(a!=NULL)?a:b;
-    BinomialNode *rest=tail->sibling;
-    while(rest!=NULL){
-        merged_root_count++;
-        rest=rest->sibling;
+#ifdef COUNT_HEAP_OPS
+    /* Counting-only pass over the merged list. Keeping it behind the
+       counter switch removes a full root-list traversal from every
+       insert and every extract-min in the timing build. */
+    {
+        BinomialNode *rest=tail->sibling;
+        while(rest!=NULL){
+            merged_root_count++;
+            rest=rest->sibling;
+        }
+        METRIC_MAX(max_root_count,merged_root_count);
     }
-    METRIC_MAX(max_root_count,merged_root_count);
+#endif
     return dummy.sibling;
 }
 
@@ -982,8 +993,12 @@ static int fib_consolidate(FibHeap *heap){
     }while(current!=heap->min);
     METRIC_MAX(max_root_count,root_count);
 
-    memset(heap->degree_table,0,
-           (size_t)heap->degree_capacity*sizeof(FibNode*));
+    /* The degree table stays all-NULL between consolidations: entries
+       consumed during linking are cleared immediately, and surviving
+       entries are cleared below as they move back to the root list.
+       Only the touched range [0,hi] is scanned, which removes the former
+       O(degree_capacity) memset and full-table scan per extract-min. */
+    int hi=-1;
 
     for(int i=0;i<root_count;i++){
         FibNode *x=heap->root_buffer[i];
@@ -1014,16 +1029,20 @@ static int fib_consolidate(FibHeap *heap){
         }
 
         heap->degree_table[degree]=x;
+        if(degree>hi){
+            hi=degree;
+        }
     }
 
     heap->min=NULL;
 
-    for(int i=0;i<heap->degree_capacity;i++){
+    for(int i=0;i<=hi;i++){
         FibNode *x=heap->degree_table[i];
         if(x==NULL){
             continue;
         }
 
+        heap->degree_table[i]=NULL;
         x->left=x;
         x->right=x;
         x->parent=NULL;
@@ -1055,7 +1074,7 @@ static int fib_heap_init(FibHeap *heap,int n){
 
     heap->nodes=(FibNode*)calloc((size_t)n,sizeof(FibNode));
     heap->root_buffer=(FibNode**)malloc((size_t)n*sizeof(FibNode*));
-    heap->degree_table=(FibNode**)malloc((size_t)capacity*sizeof(FibNode*));
+    heap->degree_table=(FibNode**)calloc((size_t)capacity,sizeof(FibNode*));
 
     if(heap->nodes==NULL||heap->root_buffer==NULL||
        heap->degree_table==NULL){
@@ -1231,54 +1250,9 @@ static int fib_heap_extract_min(void *data,HeapItem *result){
     return 1;
 }
 
-static int binary_pq_empty(void *heap){
-    return binary_heap_empty(heap);
-}
-
-static int binary_pq_insert(void *heap,int vertex,long long key){
-    return binary_heap_insert(heap,vertex,key);
-}
-
-static int binary_pq_extract_min(void *heap,HeapItem *item){
-    return binary_heap_extract_min(heap,item);
-}
-
-static int binary_pq_decrease_key(void *heap,int vertex,long long key){
-    return binary_heap_decrease_key(heap,vertex,key);
-}
-
-static int ternary_pq_empty(void *heap){
-    return ternary_heap_empty(heap);
-}
-
-static int ternary_pq_insert(void *heap,int vertex,long long key){
-    return ternary_heap_insert(heap,vertex,key);
-}
-
-static int ternary_pq_extract_min(void *heap,HeapItem *item){
-    return ternary_heap_extract_min(heap,item);
-}
-
-static int ternary_pq_decrease_key(void *heap,int vertex,long long key){
-    return ternary_heap_decrease_key(heap,vertex,key);
-}
-
-static int fib_pq_empty(void *heap){
-    return fib_heap_empty(heap);
-}
-
-static int fib_pq_insert(void *heap,int vertex,long long key){
-    return fib_heap_insert(heap,vertex,key);
-}
-
-static int fib_pq_extract_min(void *heap,HeapItem *item){
-    return fib_heap_extract_min(heap,item);
-}
-
-static int fib_pq_decrease_key(void *heap,int vertex,long long key){
-    return fib_heap_decrease_key(heap,vertex,key);
-}
-
+/* Per-query cleanup. The Dijkstra loop below calls the concrete heap
+   functions directly (via the generated specializations), so no vtable
+   wrappers are needed for the hot operations. */
 static int binary_pq_clear(void *data,const int *touched,int count){
     BinaryHeap *heap=(BinaryHeap*)data;
 
@@ -1342,184 +1316,6 @@ static int binomial_pq_clear(void *data,const int *touched,int count){
     return 1;
 }
 
-static void set_binary_pq(MinPQ *pq,BinaryHeap *heap){
-    pq->heap=heap;
-    pq->empty=binary_pq_empty;
-    pq->insert=binary_pq_insert;
-    pq->extract_min=binary_pq_extract_min;
-    pq->decrease_key=binary_pq_decrease_key;
-    pq->clear=binary_pq_clear;
-}
-
-static void set_ternary_pq(MinPQ *pq,TernaryHeap *heap){
-    pq->heap=heap;
-    pq->empty=ternary_pq_empty;
-    pq->insert=ternary_pq_insert;
-    pq->extract_min=ternary_pq_extract_min;
-    pq->decrease_key=ternary_pq_decrease_key;
-    pq->clear=ternary_pq_clear;
-}
-
-static void set_fib_pq(MinPQ *pq,FibHeap *heap){
-    pq->heap=heap;
-    pq->empty=fib_pq_empty;
-    pq->insert=fib_pq_insert;
-    pq->extract_min=fib_pq_extract_min;
-    pq->decrease_key=fib_heap_decrease_key;
-    pq->clear=fib_pq_clear;
-}
-
-static void set_binomial_pq(MinPQ *pq,BinomialHeap *heap){
-    pq->heap=heap;
-    pq->empty=binomial_heap_empty;
-    pq->insert=binomial_heap_insert;
-    pq->extract_min=binomial_heap_extract_min;
-    pq->decrease_key=binomial_heap_decrease_key;
-    pq->clear=binomial_pq_clear;
-}
-
-static void free_dijkstra_result(DijkstraResult *result){
-    free(result->dist);
-    free(result->parent);
-    result->dist=NULL;
-    result->parent=NULL;
-}
-
-static int dijkstra(const Graph *g,int source,MinPQ *pq,
-                    DijkstraResult *result){
-    unsigned char *state=NULL;
-    int ok=0;
-
-    result->dist=NULL;
-    result->parent=NULL;
-
-    if(source<0||source>=g->n||pq==NULL||
-       pq->empty==NULL||pq->insert==NULL||
-       pq->extract_min==NULL||pq->decrease_key==NULL||
-       !pq->empty(pq->heap)){
-        fprintf(stderr,"Invalid Dijkstra input or non-empty priority queue\n");
-        return 0;
-    }
-
-    result->dist=(long long*)malloc((size_t)g->n*sizeof(long long));
-    result->parent=(int*)malloc((size_t)g->n*sizeof(int));
-    state=(unsigned char*)calloc((size_t)g->n,sizeof(unsigned char));
-
-    if(result->dist==NULL||result->parent==NULL||state==NULL){
-        fprintf(stderr,"Cannot allocate Dijkstra arrays\n");
-        goto cleanup;
-    }
-
-    for(int i=0;i<g->n;i++){
-        result->dist[i]=DIST_INF;
-        result->parent[i]=-1;
-    }
-
-    result->dist[source]=0;
-    state[source]=1;
-
-    if(!pq->insert(pq->heap,source,0)){
-        fprintf(stderr,"Cannot insert source into priority queue\n");
-        goto cleanup;
-    }
-
-    while(!pq->empty(pq->heap)){
-        HeapItem item;
-
-        if(!pq->extract_min(pq->heap,&item)){
-            fprintf(stderr,"Priority queue extraction failed\n");
-            goto cleanup;
-        }
-
-        int u=item.vertex;
-        if(u<0||u>=g->n||state[u]!=1||item.key!=result->dist[u]){
-            fprintf(stderr,"Priority queue returned an invalid item\n");
-            goto cleanup;
-        }
-
-        state[u]=2;
-
-        for(int i=g->offset[u];i<g->offset[u+1];i++){
-            int v=g->edges[i].t;
-            int weight=g->edges[i].w;
-
-            if(result->dist[u]>DIST_INF-(long long)weight){
-                continue;
-            }
-
-            long long candidate=result->dist[u]+(long long)weight;
-
-            if(candidate<result->dist[v]){
-                if(state[v]==2){
-                    fprintf(stderr,"A finalized distance was decreased\n");
-                    goto cleanup;
-                }
-
-                result->dist[v]=candidate;
-                result->parent[v]=u;
-
-                if(state[v]==0){
-                    if(!pq->insert(pq->heap,v,candidate)){
-                        fprintf(stderr,"Priority queue insertion failed\n");
-                        goto cleanup;
-                    }
-                    state[v]=1;
-                }else{
-                    if(!pq->decrease_key(pq->heap,v,candidate)){
-                        fprintf(stderr,"Priority queue decrease-key failed\n");
-                        goto cleanup;
-                    }
-                }
-            }
-        }
-    }
-
-    ok=1;
-
-cleanup:
-    free(state);
-
-    if(!ok){
-        free_dijkstra_result(result);
-    }
-
-    return ok;
-}
-
-static int run_binary_dijkstra(const Graph *g,int source,
-                               DijkstraResult *result){
-    BinaryHeap heap;
-
-    if(!binary_heap_init(&heap,g->n)){
-        fprintf(stderr,"Cannot initialize binary heap\n");
-        return 0;
-    }
-
-    MinPQ pq;
-    set_binary_pq(&pq,&heap);
-    int ok=dijkstra(g,source,&pq,result);
-
-    binary_heap_destroy(&heap);
-    return ok;
-}
-
-static int run_fib_dijkstra(const Graph *g,int source,
-                            DijkstraResult *result){
-    FibHeap heap;
-
-    if(!fib_heap_init(&heap,g->n)){
-        fprintf(stderr,"Cannot initialize Fibonacci heap\n");
-        return 0;
-    }
-
-    MinPQ pq;
-    set_fib_pq(&pq,&heap);
-    int ok=dijkstra(g,source,&pq,result);
-
-    fib_heap_destroy(&heap);
-    return ok;
-}
-
 
 static int dijkstra_workspace_init(DijkstraWorkspace *workspace,int n){
     workspace->dist=NULL;
@@ -1565,124 +1361,152 @@ static void dijkstra_workspace_destroy(DijkstraWorkspace *workspace){
     workspace->n=0;
 }
 
-static int dijkstra_query(const Graph *g,int source,int target,
-                          MinPQ *pq,DijkstraWorkspace *workspace,
-                          SearchStats *stats,long long *answer){
-    int ok=0;
-
-    if(source<0||source>=g->n||target<0||target>=g->n||
-       workspace->n!=g->n||pq==NULL||pq->empty==NULL||
-       pq->insert==NULL||pq->extract_min==NULL||
-       pq->decrease_key==NULL||pq->clear==NULL||stats==NULL||
-       workspace->touched_count!=0||!pq->empty(pq->heap)){
-        fprintf(stderr,"Invalid point-to-point Dijkstra input\n");
-        return 0;
-    }
-
-    *answer=DIST_INF;
-    workspace->dist[source]=0;
-    workspace->state[source]=1;
-    workspace->touched[0]=source;
-    workspace->touched_count=1;
-
-    if(!pq->insert(pq->heap,source,0)){
-        fprintf(stderr,"Cannot insert source into priority queue\n");
-        goto cleanup;
-    }
-    stats->pq_inserts++;
-
-    while(!pq->empty(pq->heap)){
-        HeapItem item;
-
-        if(!pq->extract_min(pq->heap,&item)){
-            fprintf(stderr,"Priority queue extraction failed\n");
-            goto cleanup;
-        }
-        stats->pq_extracts++;
-
-        int u=item.vertex;
-        if(u<0||u>=g->n||workspace->state[u]!=1||
-           item.key!=workspace->dist[u]){
-            fprintf(stderr,"Priority queue returned an invalid item\n");
-            goto cleanup;
-        }
-
-        workspace->state[u]=2;
-        stats->settled_vertices++;
-
-        if(u==target){
-            *answer=workspace->dist[u];
-            ok=1;
-            goto cleanup;
-        }
-
-        for(int i=g->offset[u];i<g->offset[u+1];i++){
-            stats->scanned_arcs++;
-            int v=g->edges[i].t;
-            int weight=g->edges[i].w;
-
-            if(v<0||v>=g->n||weight<0){
-                fprintf(stderr,"Invalid edge in graph\n");
-                goto cleanup;
-            }
-
-            if(workspace->dist[u]>DIST_INF-(long long)weight){
-                continue;
-            }
-
-            long long candidate=workspace->dist[u]+(long long)weight;
-
-            if(candidate<workspace->dist[v]){
-                if(workspace->state[v]==2){
-                    fprintf(stderr,"A finalized distance was decreased\n");
-                    goto cleanup;
-                }
-
-                if(workspace->state[v]==0){
-                    if(workspace->touched_count>=workspace->n){
-                        fprintf(stderr,"Too many touched vertices\n");
-                        goto cleanup;
-                    }
-
-                    workspace->touched[workspace->touched_count++]=v;
-                    workspace->dist[v]=candidate;
-                    workspace->state[v]=1;
-
-                    if(!pq->insert(pq->heap,v,candidate)){
-                        fprintf(stderr,"Priority queue insertion failed\n");
-                        goto cleanup;
-                    }
-                    stats->pq_inserts++;
-                }else{
-                    workspace->dist[v]=candidate;
-                    if(!pq->decrease_key(pq->heap,v,candidate)){
-                        fprintf(stderr,"Priority queue decrease-key failed\n");
-                        goto cleanup;
-                    }
-                    stats->pq_decrease_keys++;
-                }
-            }
-        }
-    }
-
-    ok=1;
-
-cleanup:
-    if(!pq->clear(pq->heap,workspace->touched,
-                  workspace->touched_count)){
-        fprintf(stderr,"Priority queue cleanup failed\n");
-        ok=0;
-    }
-
-    for(int i=0;i<workspace->touched_count;i++){
-        int vertex=workspace->touched[i];
-        workspace->dist[vertex]=DIST_INF;
-        workspace->state[vertex]=0;
-    }
-    workspace->touched_count=0;
-
-    return ok;
+/* One Dijkstra body compiled once per heap type. Passing the concrete
+   heap functions as macro arguments lets the compiler inline insert,
+   extract-min, decrease-key and the empty check. The previous version
+   dispatched every operation through a function-pointer table, which
+   blocked inlining on hundreds of millions of calls. */
+#define DEFINE_DIJKSTRA_QUERY(NAME,HEAP_TYPE,EMPTY,INSERT,EXTRACT,DECREASE,CLEAR) \
+static int dijkstra_query_##NAME(const Graph *g,int source,int target, \
+                                 void *heap_void, \
+                                 DijkstraWorkspace *workspace, \
+                                 SearchStats *stats,long long *answer){ \
+    HEAP_TYPE *heap=(HEAP_TYPE*)heap_void; \
+    int ok=0; \
+    \
+    if(source<0||source>=g->n||target<0||target>=g->n|| \
+       workspace->n!=g->n||stats==NULL|| \
+       workspace->touched_count!=0||!EMPTY(heap)){ \
+        fprintf(stderr,"Invalid point-to-point Dijkstra input\n"); \
+        return 0; \
+    } \
+    \
+    *answer=DIST_INF; \
+    workspace->dist[source]=0; \
+    workspace->state[source]=1; \
+    workspace->touched[0]=source; \
+    workspace->touched_count=1; \
+    \
+    if(!INSERT(heap,source,0)){ \
+        fprintf(stderr,"Cannot insert source into priority queue\n"); \
+        goto cleanup; \
+    } \
+    stats->pq_inserts++; \
+    \
+    while(!EMPTY(heap)){ \
+        HeapItem item; \
+        \
+        if(!EXTRACT(heap,&item)){ \
+            fprintf(stderr,"Priority queue extraction failed\n"); \
+            goto cleanup; \
+        } \
+        stats->pq_extracts++; \
+        \
+        int u=item.vertex; \
+        if(u<0||u>=g->n||workspace->state[u]!=1|| \
+           item.key!=workspace->dist[u]){ \
+            fprintf(stderr,"Priority queue returned an invalid item\n"); \
+            goto cleanup; \
+        } \
+        \
+        workspace->state[u]=2; \
+        stats->settled_vertices++; \
+        \
+        if(u==target){ \
+            *answer=workspace->dist[u]; \
+            ok=1; \
+            goto cleanup; \
+        } \
+        \
+        for(int i=g->offset[u];i<g->offset[u+1];i++){ \
+            stats->scanned_arcs++; \
+            int v=g->edges[i].t; \
+            int weight=g->edges[i].w; \
+            \
+            if(v<0||v>=g->n||weight<0){ \
+                fprintf(stderr,"Invalid edge in graph\n"); \
+                goto cleanup; \
+            } \
+            \
+            if(workspace->dist[u]>DIST_INF-(long long)weight){ \
+                continue; \
+            } \
+            \
+            long long candidate=workspace->dist[u]+(long long)weight; \
+            \
+            if(candidate<workspace->dist[v]){ \
+                if(workspace->state[v]==2){ \
+                    fprintf(stderr, \
+                            "A finalized distance was decreased\n"); \
+                    goto cleanup; \
+                } \
+                \
+                if(workspace->state[v]==0){ \
+                    if(workspace->touched_count>=workspace->n){ \
+                        fprintf(stderr,"Too many touched vertices\n"); \
+                        goto cleanup; \
+                    } \
+                    \
+                    workspace->touched[workspace->touched_count++]=v; \
+                    workspace->dist[v]=candidate; \
+                    workspace->state[v]=1; \
+                    \
+                    if(!INSERT(heap,v,candidate)){ \
+                        fprintf(stderr, \
+                                "Priority queue insertion failed\n"); \
+                        goto cleanup; \
+                    } \
+                    stats->pq_inserts++; \
+                }else{ \
+                    workspace->dist[v]=candidate; \
+                    if(!DECREASE(heap,v,candidate)){ \
+                        fprintf(stderr, \
+                                "Priority queue decrease-key failed\n"); \
+                        goto cleanup; \
+                    } \
+                    stats->pq_decrease_keys++; \
+                } \
+            } \
+        } \
+    } \
+    \
+    ok=1; \
+    \
+cleanup: \
+    if(!CLEAR(heap,workspace->touched,workspace->touched_count)){ \
+        fprintf(stderr,"Priority queue cleanup failed\n"); \
+        ok=0; \
+    } \
+    \
+    for(int i=0;i<workspace->touched_count;i++){ \
+        int vertex=workspace->touched[i]; \
+        workspace->dist[vertex]=DIST_INF; \
+        workspace->state[vertex]=0; \
+    } \
+    workspace->touched_count=0; \
+    \
+    return ok; \
 }
+
+DEFINE_DIJKSTRA_QUERY(binary,BinaryHeap,
+                      binary_heap_empty,binary_heap_insert,
+                      binary_heap_extract_min,binary_heap_decrease_key,
+                      binary_pq_clear)
+DEFINE_DIJKSTRA_QUERY(ternary,TernaryHeap,
+                      ternary_heap_empty,ternary_heap_insert,
+                      ternary_heap_extract_min,ternary_heap_decrease_key,
+                      ternary_pq_clear)
+DEFINE_DIJKSTRA_QUERY(fibonacci,FibHeap,
+                      fib_heap_empty,fib_heap_insert,
+                      fib_heap_extract_min,fib_heap_decrease_key,
+                      fib_pq_clear)
+DEFINE_DIJKSTRA_QUERY(binomial,BinomialHeap,
+                      binomial_heap_empty,binomial_heap_insert,
+                      binomial_heap_extract_min,binomial_heap_decrease_key,
+                      binomial_pq_clear)
+
+typedef int (*QueryFn)(const Graph *,int,int,void *,
+                       DijkstraWorkspace *,SearchStats *,long long *);
 
 static unsigned int next_random(unsigned int *state){
     unsigned int x=*state;
@@ -1696,6 +1520,13 @@ static unsigned int next_random(unsigned int *state){
 static int generate_queries(Query *queries,int n,int count,
                             unsigned int seed){
     if(n<2){
+        return 0;
+    }
+    /* A graph with n vertices has only n*(n-1) ordered pairs with
+       source != target. Without this guard the deduplication loop below
+       would spin forever on a small graph. */
+    if((long long)n*(long long)(n-1)<(long long)count){
+        fprintf(stderr,"Not enough distinct source-target pairs\n");
         return 0;
     }
     if(seed==0){
@@ -1736,7 +1567,8 @@ static int generate_queries(Query *queries,int n,int count,
 }
 
 static int measure_query_batch(const Graph *g,Query *queries,int count,
-                               MinPQ *pq,DijkstraWorkspace *workspace,
+                               QueryFn query_fn,void *heap,
+                               DijkstraWorkspace *workspace,
                                int heap_type,double *seconds,
                                SearchStats *stats){
     memset(stats,0,sizeof(*stats));
@@ -1748,8 +1580,8 @@ static int measure_query_batch(const Graph *g,Query *queries,int count,
 
     for(int i=0;i<count;i++){
         long long answer;
-        if(!dijkstra_query(g,queries[i].source,queries[i].target,
-                           pq,workspace,stats,&answer)){
+        if(!query_fn(g,queries[i].source,queries[i].target,
+                     heap,workspace,stats,&answer)){
             return 0;
         }
 
@@ -1790,10 +1622,8 @@ static int run_binary_batch(const Graph *g,Query *queries,int count,
         return 0;
     }
 
-    MinPQ pq;
-    set_binary_pq(&pq,&heap);
-    int ok=measure_query_batch(g,queries,count,&pq,&workspace,0,seconds,
-                               stats);
+    int ok=measure_query_batch(g,queries,count,dijkstra_query_binary,
+                               &heap,&workspace,0,seconds,stats);
 
     dijkstra_workspace_destroy(&workspace);
     binary_heap_destroy(&heap);
@@ -1816,10 +1646,8 @@ static int run_fib_batch(const Graph *g,Query *queries,int count,
         return 0;
     }
 
-    MinPQ pq;
-    set_fib_pq(&pq,&heap);
-    int ok=measure_query_batch(g,queries,count,&pq,&workspace,1,seconds,
-                               stats);
+    int ok=measure_query_batch(g,queries,count,dijkstra_query_fibonacci,
+                               &heap,&workspace,1,seconds,stats);
 
     dijkstra_workspace_destroy(&workspace);
     fib_heap_destroy(&heap);
@@ -1843,10 +1671,8 @@ static int run_binomial_batch(const Graph *g,Query *queries,int count,
         return 0;
     }
 
-    MinPQ pq;
-    set_binomial_pq(&pq,&heap);
-    int ok=measure_query_batch(g,queries,count,&pq,&workspace,2,seconds,
-                               stats);
+    int ok=measure_query_batch(g,queries,count,dijkstra_query_binomial,
+                               &heap,&workspace,2,seconds,stats);
 
     dijkstra_workspace_destroy(&workspace);
     binomial_heap_destroy(&heap);
@@ -1869,10 +1695,8 @@ static int run_ternary_batch(const Graph *g,Query *queries,int count,
         return 0;
     }
 
-    MinPQ pq;
-    set_ternary_pq(&pq,&heap);
-    int ok=measure_query_batch(g,queries,count,&pq,&workspace,3,seconds,
-                               stats);
+    int ok=measure_query_batch(g,queries,count,dijkstra_query_ternary,
+                               &heap,&workspace,3,seconds,stats);
 
     dijkstra_workspace_destroy(&workspace);
     ternary_heap_destroy(&heap);
@@ -2001,6 +1825,7 @@ cleanup:
 }
 
 
+#ifdef COUNT_HEAP_OPS
 static int collect_internal_stats_dataset(const char *name,const char *path,
                                           FILE *stats_file){
     Graph g={0,0,NULL,NULL};
@@ -2039,10 +1864,14 @@ static int collect_internal_stats_dataset(const char *name,const char *path,
         printf("Counting %s / %s internal operations...\n",
                name,heap_names[h]);
         fflush(stdout);
+#ifdef COUNT_HEAP_OPS
         active_heap_metrics=&metrics[h];
+#endif
         int run_ok=runners[h](&g,queries,QUERY_COUNT,
                               &ignored_seconds[h],&work[h]);
+#ifdef COUNT_HEAP_OPS
         active_heap_metrics=NULL;
+#endif
         if(!run_ok){
             goto cleanup;
         }
@@ -2083,7 +1912,9 @@ static int collect_internal_stats_dataset(const char *name,const char *path,
     ok=(matching==QUERY_COUNT);
 
 cleanup:
+#ifdef COUNT_HEAP_OPS
     active_heap_metrics=NULL;
+#endif
     free(queries);
     free_graph(&g);
     return ok;
@@ -2127,10 +1958,18 @@ static int run_internal_stats(void){
     printf("Saved results/heap_internal_stats.csv\n");
     return 0;
 }
+#endif
 
 int main(int argc,char **argv){
     if(argc>1&&strcmp(argv[1],"--count-heap-ops")==0){
+#ifdef COUNT_HEAP_OPS
         return run_internal_stats();
+#else
+        fprintf(stderr,
+                "This binary was built without heap counters.\n"
+                "Rebuild with -DCOUNT_HEAP_OPS to use --count-heap-ops.\n");
+        return 1;
+#endif
     }
 
     const char *names[3]={"NY","COL","FLA"};
