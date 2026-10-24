@@ -1,0 +1,37 @@
+{
+  "started_utc": "2026-10-24T21:36:20.584029+00:00",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "macos_version": "26.6.2",
+  "architecture": "arm64",
+  "processor": "Apple M1 Max",
+  "memory_bytes": 34359738368,
+  "physical_cores": 10,
+  "logical_cores": 10,
+  "compiler": "Apple clang version 21.0.0 (clang-2100.3.34.2)\nTarget: arm64-apple-darwin25.6.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+  "build_flags": [
+    "-std=c11",
+    "-O2",
+    "-Wall",
+    "-Wextra"
+  ],
+  "source_commit": "87f47cd5c1d5445c05424d409ed31cab0ea454bf",
+  "source_sha256": "a44f1f0e126c6f5fc6a757971c1e00abfcb5e78f55d98f0fe9759f3c7008cf35",
+  "timed_binary_sha256": "2186e53aee9e2a52bdbdd7e1dad11e719d4b511c137f23a6ba9e082479de8989",
+  "warmup_rounds": 1,
+  "measured_rounds": 3,
+  "queries_per_dataset_per_round": 1000,
+  "clock": "clock(): process CPU seconds; loading and allocation excluded",
+  "heap_order": "dataset-dependent rotation from src/1.c; same order on each repetition",
+  "internal_counters": "pre-existing legacy CSV retained; not remeasured in this experiment",
+  "excluded_partial_rounds": [
+    4
+  ],
+  "input_sha256": {
+    "NY": "4c3a26a2889710d3bce8254b83586760a02cd08509c6746964f43668c59a870d",
+    "COL": "1c58912534d13cfa73212706742ff1a7b22a40d9d7464046b53b963109ffa351",
+    "FLA": "912ac8d1ec2a7b0420fda525b692a1a27f81f1f8f5bf2ef9a38f2a865aa137bd"
+  },
+  "benchmark_queries.csv": "5cc657dabb85e4f330a6488aff93eae0d230a495c1c8b2533ed66838a6132a7e",
+  "benchmark_operations.csv": "324c5e0b617cac44afbfc9087f1703272605760037ad261f2f4cf069aa975a96",
+  "summarized_utc": "2026-10-24T22:15:10.207009+00:00"
+}

@@ -1,0 +1,27 @@
+{
+  "oracle": "Floyd-Warshall, independent Python implementation",
+  "vertices_per_fixture": 40,
+  "fixture_seed": 20261025,
+  "source_sha256": "a44f1f0e126c6f5fc6a757971c1e00abfcb5e78f55d98f0fe9759f3c7008cf35",
+  "query_pairs_checked": 3000,
+  "heap_answers_checked": 12000,
+  "input_kind": "synthetic graphs, separate from the USA road-network benchmark",
+  "fixtures": {
+    "connected": {
+      "queries": 1000,
+      "unreachable": 0,
+      "above_int32": 0
+    },
+    "disconnected": {
+      "queries": 1000,
+      "unreachable": 501,
+      "above_int32": 0
+    },
+    "long_paths_and_isolated_vertices": {
+      "queries": 1000,
+      "unreachable": 621,
+      "above_int32": 330
+    }
+  },
+  "status": "passed"
+}

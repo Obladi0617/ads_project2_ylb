@@ -91,7 +91,9 @@ the key updates caused by successful relaxations.
 The project asks us to implement Dijkstra's algorithm with multiple heap
 structures and determine which implementation performs best on USA road
 networks. The evaluation uses three DIMACS graphs, NY, COL, and FLA, with 1,000
-distinct source--target queries per graph. The implementation compares four
+distinct source--target queries per graph. After one complete warm-up,
+each batch is measured three times and summarized by its median and
+observed range. The implementation compares four
 min-priority queues: binary, ternary, Fibonacci, and binomial heaps. Including
 four structures exceeds the assignment's two-structure minimum and includes
 the required Fibonacci heap.
@@ -295,42 +297,84 @@ but the local files have not been checked arc by arc against the official
 downloads. The provenance is documented in \path{data/dimacs/README.md}.
 
 \section{Measurement Method}
-The main runtime table reports the optimized build recorded in
-\path{results/benchmark_results.csv}. Its environment is Windows 11, MinGW
-g++ 8.1.0, \code{-O2}, and single-threaded execution. The program uses
-\code{clock()} to measure the CPU time for each batch of 1,000 queries. Graph
-loading, query generation, and workspace/heap allocation occur outside the
-timed interval; per-query heap and state cleanup is included. The starting
-heap rotates across datasets to reduce a fixed ordering bias.
+The experiment was reproduced on October 25, 2026, on an Apple M1 Max
+with 32 GiB of memory and 10 CPU cores, running macOS 26.6.2.
+The unchanged C source was compiled with Apple Clang 21.0.0 in C11 mode
+using \code{-O2}, \code{-Wall}, and \code{-Wextra}. Execution is single-threaded.
 
-The timed build disables detailed heap counters but retains high-level
-Dijkstra counts for scanned arcs, queue insertions, extract-min operations,
-and successful key decreases. A separate count-only build records internal
-heap events; that instrumentation is excluded from the runtime measurements.
+One complete warm-up was followed by three complete measured program runs.
+Each run used the same 1,000 distinct source--target pairs per network,
+giving three observations per heap and graph, or 36,000 timed query
+executions overall. The reported times are medians across the three
+1,000-query batches. Repetition measures run-to-run variation on a fixed
+workload; there are still 1,000 distinct pairs per graph.
+
+The program uses \code{clock()} to measure CPU time around each batch.
+Graph loading, query generation, and workspace/heap allocation are excluded;
+per-query heap and state cleanup is included. Warm-up times are excluded.
+The starting heap rotates by dataset; each dataset keeps the same heap order
+across repetitions. Queries, answers, and high-level operation counts were
+checked for exact agreement across the warm-up and all three measured runs.
+Machine details, compiler flags, and input/source hashes are recorded in
+\path{results/benchmark_environment.json}.
+
+Detailed heap counters are disabled in the timing build. The existing
+internal-counter CSV is retained from the earlier implementation's separate
+counting pass. It is used only as legacy structural-work evidence in
+Chapter 4, not as a time breakdown of this local experiment.
 
 \section{Correctness Cross-Check}
-For every graph, the four heap implementations returned matching distances
-for all 1,000 queries. Query pairs and answers are recorded in
-\path{results/benchmark_queries.csv}. The timing and high-level operation
-files are listed in the appendix. This match is a useful cross-check among
-implementations, but it is not an independent proof of correctness.
+On every road network and in every measured repetition, all four heaps
+returned identical distances for all 1,000 query pairs. The query sequence,
+answers, and Dijkstra-level work were identical across repetitions.
+
+A Python implementation of Floyd--Warshall provided an independent
+reference on three synthetic 40-vertex graphs. These fixtures
+cover connected and disconnected graphs, zero-weight and parallel edges,
+isolated vertices, and path distances beyond 32-bit integer range.
+All 12,000 heap answers for 3,000 query pairs matched the oracle, including
+1,122 unreachable pairs and 330 distances above $2^{31}-1$.
+These synthetic tests are separate from the road-network timings.
+The check and its record are available in
+\path{scripts/check_shortest_paths.py} and \path{results/reference_checks.json}.
+Together with the Chapter 2 argument, they provide independent evidence for
+the tested cases.
 
 \section{Run-Time Results}
-Table~\ref{tab:runtime} reports total CPU seconds for each batch. Since every
-batch contains exactly 1,000 queries, the same numeric values are also the
-average milliseconds per query.
+Table~\ref{tab:runtime} reports median total CPU seconds for 1,000-query
+batches over three repetitions. Since each batch contains 1,000 queries,
+its total seconds are numerically equal to its average milliseconds per
+query. Table~\ref{tab:runtime-ranges} gives the observed minimum and maximum.
+The raw observations, means, and sample standard deviations are stored in
+the repetition and statistics CSV files.
 
 \begin{table}[H]
   \centering
-  \caption{Total runtime for 1,000 point-to-point queries (seconds)}
+  \small
+  \caption{Median total CPU time for 1,000 queries, three repetitions (seconds)}
   \label{tab:runtime}
   \begin{tabular}{lrrrrc}
     \toprule
-    Dataset & Binary & Ternary & Fibonacci & Binomial & Matching answers \\
+    Dataset & Binary & Ternary & Fibonacci & Binomial & Matches per run \\
     \midrule
-    NY  & 26.373 & 27.077 & 61.607  & 39.764  & 1,000/1,000 \\
-    COL & 45.077 & 43.880 & 98.328  & 66.029  & 1,000/1,000 \\
-    FLA & 108.990 & 119.341 & 277.698 & 172.555 & 1,000/1,000 \\
+    NY & 12.744 & 11.608 & 24.264 & 21.850 & 1,000/1,000 \\
+    COL & 20.584 & 18.823 & 37.767 & 33.708 & 1,000/1,000 \\
+    FLA & 51.513 & 47.112 & 96.150 & 85.851 & 1,000/1,000 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Observed minimum--maximum times across three repetitions (seconds)}
+  \label{tab:runtime-ranges}
+  \begin{tabular}{lrrrr}
+    \toprule
+    Dataset & Binary & Ternary & Fibonacci & Binomial \\
+    \midrule
+    NY & 12.688--12.767 & 11.569--11.647 & 24.263--24.267 & 21.822--21.904 \\
+    COL & 20.482--20.662 & 18.787--18.950 & 37.621--37.968 & 33.631--33.759 \\
+    FLA & 51.370--51.790 & 47.067--47.963 & 95.916--96.385 & 85.570--86.079 \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -339,48 +383,39 @@ average milliseconds per query.
   \centering
   \begin{tikzpicture}
     \begin{axis}[
-      ybar,
-      bar width=8pt,
-      width=0.96\linewidth,
-      height=8cm,
-      ymin=0,
-      ylabel={Total CPU time for 1,000 queries (s)},
+      ybar, bar width=8pt, width=0.96\linewidth, height=8cm, ymin=0,
+      ylabel={Median CPU time for 1,000 queries (s)},
       xlabel={Road network (directed arcs in millions)},
-      symbolic x coords={NY,COL,FLA},
-      xtick=data,
+      symbolic x coords={NY,COL,FLA}, xtick=data,
       xticklabels={NY (0.734M),COL (1.057M),FLA (2.713M)},
-      x tick label style={font=\small},
-      ymajorgrids=true,
-      grid style={gray!25},
-      enlarge x limits=0.22,
+      x tick label style={font=\small}, ymajorgrids=true,
+      grid style={gray!25}, enlarge x limits=0.22,
       legend style={at={(0.02,0.98)},anchor=north west,legend columns=2,
-                    font=\small,draw=none,fill=white},
-      legend cell align=left
+                    font=\small,draw=none,fill=white}, legend cell align=left
     ]
-      \addplot coordinates {(NY,26.373) (COL,45.077) (FLA,108.990)};
-      \addplot coordinates {(NY,27.077) (COL,43.880) (FLA,119.341)};
-      \addplot coordinates {(NY,61.607) (COL,98.328) (FLA,277.698)};
-      \addplot coordinates {(NY,39.764) (COL,66.029) (FLA,172.555)};
+      \addplot+[error bars/.cd,y dir=both,y explicit,error bar style={black}] coordinates {(NY,12.744330) +=(0,0.022292) -=(0,0.056512) (COL,20.584066) +=(0,0.077713) -=(0,0.102173) (FLA,51.513346) +=(0,0.276741) -=(0,0.143749)};
+      \addplot+[error bars/.cd,y dir=both,y explicit,error bar style={black}] coordinates {(NY,11.607607) +=(0,0.039331) -=(0,0.038411) (COL,18.822622) +=(0,0.127060) -=(0,0.036079) (FLA,47.111732) +=(0,0.851168) -=(0,0.044973)};
+      \addplot+[error bars/.cd,y dir=both,y explicit,error bar style={black}] coordinates {(NY,24.264308) +=(0,0.002642) -=(0,0.001264) (COL,37.767477) +=(0,0.200273) -=(0,0.146622) (FLA,96.149886) +=(0,0.234888) -=(0,0.234069)};
+      \addplot+[error bars/.cd,y dir=both,y explicit,error bar style={black}] coordinates {(NY,21.850092) +=(0,0.054236) -=(0,0.027823) (COL,33.708046) +=(0,0.051217) -=(0,0.076649) (FLA,85.850519) +=(0,0.228733) -=(0,0.280982)};
+
       \legend{Binary,Ternary,Fibonacci,Binomial}
     \end{axis}
   \end{tikzpicture}
-  \caption{Batch runtime as the number of directed input arcs increases}
+  \caption{Median runtime versus graph size; whiskers show observed minimum
+  and maximum across three repetitions.}
   \label{fig:runtime}
 \end{figure}
 
-The binary heap is fastest on NY and FLA, while the ternary heap is about 2.7\%
-faster on COL. The two array heaps are much closer to each other than to the
-linked heaps, although their ranking changes across datasets. Fibonacci is
-about 2.18--2.55 times as slow as binary; binomial is about 1.47--1.58 times
-as slow. The three graphs differ in both size and road
-structure, so the increase in runtime across the plot cannot be attributed to
-arc count alone. Each heap--dataset pair was timed once, so small differences
-should be treated as observations rather than stable rankings.
+The ternary heap was fastest in all three repetitions on each network.
+The binary heap followed, then binomial and Fibonacci. These are observations
+for this machine, compiler, and query set. The networks differ in structure
+as well as size, so the plot does not isolate arc count as a cause of runtime.
+Whiskers describe observed variation and are not confidence intervals.
 
 \section{Dijkstra Work Performed}
 The following counts are totals over the 1,000 queries on each dataset. All
 four implementations perform the same high-level Dijkstra work on a given
-graph.
+graph, with identical counts in all three repetitions.
 
 \begin{table}[H]
   \centering
@@ -437,30 +472,35 @@ the binary heap. It makes the size and consistency of the gaps easier to see.
 
 \begin{table}[H]
   \centering
-  \caption{Runtime relative to the binary heap in the main benchmark}
+  \small
+  \caption{Median runtime relative to the binary heap in the local experiment}
   \label{tab:runtime-ratios}
   \begin{tabular}{lrrr}
     \toprule
     Dataset & Ternary / Binary & Fibonacci / Binary & Binomial / Binary \\
     \midrule
-    NY  & 1.027 ($+2.7\%$) & 2.335 & 1.508 \\
-    COL & 0.973 ($-2.7\%$) & 2.181 & 1.465 \\
-    FLA & 1.095 ($+9.5\%$) & 2.548 & 1.583 \\
+    NY & 0.911 & 1.904 & 1.714 \\
+    COL & 0.914 & 1.835 & 1.638 \\
+    FLA & 0.915 & 1.867 & 1.667 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-The array-heap results are closer to each other than to the linked heaps, and
-their order changes by dataset. The Fibonacci implementation is 2.18--2.55
-times the binary runtime, and the binomial implementation is 1.46--1.58 times
-the binary runtime. Each heap--dataset pair was timed only once; in
-particular, repeated runs are needed to assess whether the 9.5\% FLA
-binary/ternary gap is stable. The larger linked-heap gaps recur on all three
-graphs, though they still describe only these implementations and this
-workload.
 
-\subsection{Why the Array Heaps Are Close}
-The active queue peaks at only 1,002, 1,037, and 1,575 items on NY, COL, and
+The ternary heap has the lowest median on all three networks. Fibonacci
+takes 1.83--1.90 times the binary median,
+while binomial takes 1.64--1.71 times the binary median.
+For each graph, the observed binary and ternary ranges do not overlap.
+Three repetitions document this local result but provide limited evidence
+for rankings on other machines or query distributions.
+
+The networks have only about 2.4--2.8 directed arcs per vertex.
+With sparse graphs, substituting $E=O(V)$ into the full-search bounds makes
+both array-heap and Fibonacci upper bounds $O(V\log V)$. This helps explain why
+Fibonacci's general asymptotic bound need not yield a practical advantage here.
+
+\subsection{Binary and Ternary: Height versus Child Checks}
+The legacy counter pass recorded peak active queues of 1,002, 1,037, and 1,575 items on NY, COL, and
 FLA. A binary heap at these sizes has roughly 10--11 levels. Both array heaps
 therefore have short paths, contiguous storage, and direct vertex lookup via
 the position array. A ternary heap shortens the downward path but examines up
@@ -483,12 +523,13 @@ to three children per level. This trade-off appears in the internal counters:
 \end{table}
 
 The ternary heap consistently performs fewer downward iterations and swaps,
-but performs slightly more comparisons. With both structures operating on
-contiguous arrays and on shallow queues, these costs nearly balance: ternary
-is 2.7\% faster on COL, but 2.7\% slower on NY and 9.5\% slower on FLA in
-the single-run timing table. Cache locality is a plausible contributor to
-the array heaps' advantage over pointer-based heaps, but hardware cache
-counters were not collected.
+while making slightly more counted comparisons. Its observed median runtime
+was lower than binary by 8.9\%, 8.6\%, 8.5\% on NY, COL,
+and FLA, respectively. It was faster in all three paired repetitions
+on each graph. Shorter paths and fewer swaps are consistent with this
+result. Both structures use compact active arrays; cache locality and
+branch behavior are plausible contributors, but hardware counters were
+not collected.
 
 \subsection{Why the Fibonacci Heap Is Slower Here}
 The amortized $O(1)$ decrease-key operation is useful only when it forms a
@@ -498,7 +539,7 @@ performed 135.5--531.6 million times per dataset. Each Fibonacci extract-min
 promotes children and consolidates roots, so this frequent operation incurs
 linked-structure maintenance. Table~\ref{tab:fib-counters} summarizes the
 legacy counters for the Fibonacci implementation.
-In the following tables, M and B denote million and billion, respectively.
+In the following tables, B denotes one billion.
 
 \begin{table}[H]
   \centering
@@ -516,44 +557,24 @@ In the following tables, M and B denote million and billion, respectively.
   \end{tabular}
 \end{table}
 
-The Fibonacci heap performs about 20\% more counted key/item comparisons than
-the binary heap. Table~\ref{tab:fib-counters} shows about 7.1--7.5 child
+The legacy Fibonacci counter pass recorded about 20\% more key/item
+comparisons than binary. Table~\ref{tab:fib-counters} shows about 7.1--7.5 child
 promotions per extract-min and roughly one billion to four billion tree links
 per dataset. Cuts happen on only about one fifth of successful decrease-key calls. Thus, this query
 mix does not provide enough decrease-key work to compensate for repeated
 extract-min consolidation and linked-list traversal.
 
-The earlier Fibonacci implementation also cleared and scanned a degree table
-whose capacity was based on the full graph size on every consolidation. The
-estimate in Table~\ref{tab:fib-degree} quantifies this avoidable work; the
-optimized version processes only the degrees touched during that
-consolidation.
-
-\begin{table}[H]
-  \centering
-  \caption{Estimated redundant degree-table work in the earlier Fibonacci implementation}
-  \label{tab:fib-degree}
-  \small
-  \begin{tabular}{lrrrr}
-    \toprule
-    Dataset & Table slots & Extract-min calls & Full-scan iterations & Logical bytes cleared \\
-    \midrule
-    NY  & 39 & 135.5 M & 5.28 B & 42.3 GB \\
-    COL & 39 & 220.8 M & 8.61 B & 68.9 GB \\
-    FLA & 43 & 531.6 M & 22.86 B & 182.9 GB \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-The byte totals are repeated logical bytes passed to clearing operations, not
-DRAM traffic; the small table may remain in cache. They estimate the earlier
-implementation and must not be read as work performed by the optimized
-version.
+Insertion is also amortized constant time in a Fibonacci heap and accounts
+for roughly half of queue calls here. Lazy insertion defers consolidation to
+extract-min, where the recorded child promotion and tree-link work occurs.
+The current optimized degree table avoids a full unused-range scan, while
+the structural costs of extraction remain.
 
 \subsection{Why the Binomial Heap Is Slower Despite Fewer Comparisons}
 The binomial heap records only about 70\% as many counted comparisons as the
-binary heap, yet takes 1.46--1.58 times as long. This illustrates why a
-comparison counter is not a complete cost model. Binomial operations also
+binary heap, yet its local median takes 1.64--1.71 times as long. This illustrates why a
+comparison counter is not a complete cost model. Degree comparisons
+inside binomial root-list loops are excluded from that counter. Binomial operations also
 merge degree-ordered root lists, link equal-degree trees, promote children,
 and update parent/sibling pointers.
 
@@ -578,77 +599,35 @@ FLA, consistent with substantial list traversal. The counter definitions
 differ between Fibonacci and binomial heaps, so their root-list totals are
 not directly comparable.
 
-\subsection{Separate One-Round Optimization Comparison}
-The performance analysis notes also record an original-versus-optimized
-comparison on the same machine. It is a separate run set from the primary
-runtime table and is included only to show the observed relative change.
-Each version was timed once.
-Each total sums NY, COL, and FLA, or 3,000 queries per heap and version.
-
-\begin{table}[H]
-  \centering
-  \caption{Separate one-round original-versus-optimized comparison}
-  \label{tab:optimization}
-  \begin{tabular}{lrrr}
-    \toprule
-    Heap & Original total (s) & Optimized total (s) & Observed change \\
-    \midrule
-    Binary    & 81.527  & 70.591  & $-13.4\%$ \\
-    Ternary   & 84.023  & 73.247  & $-12.8\%$ \\
-    Fibonacci & 255.043 & 194.704 & $-23.7\%$ \\
-    Binomial  & 172.224 & 153.616 & $-10.8\%$ \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-Common changes included compiling out internal counters from the timing build
-and using direct heap calls on the Dijkstra hot path. The Fibonacci change
-also reduced degree-table scanning, while the binomial change removed an
-extra traversal used only for counting. The table cannot separate the
-contribution of each change, and its one-round percentages are not repeated-run
-statistics.
-
 \section{Further Improvements and Measurement Limits}
-The current measurements support a comparison of these implementations on
-these road-network point-to-point queries. They do not establish a universal
-ranking. The main limitations are:
-
 \begin{enumerate}
-  \item Each heap--dataset pair in the primary table was timed once. Repeated
-        runs after warm-up, summarized with medians and dispersion, would make
-        small differences more reliable.
-  \item The primary runtimes and the separate original-versus-optimized
-        timings are different experiment sets and must not be combined into a
-        single speedup calculation.
-  \item Internal heap counters describe the earlier implementation. They
-        explain operation patterns but are not a precise cost breakdown for
-        the optimized build.
-  \item Matching answers across four implementations is a cross-check, not an
-        independent correctness proof. Additional small-graph reference tests
-        should be run against the optimized version.
-  \item The experiment does not collect hardware cache-miss, branch, or
-        pointer-access measurements. Memory locality is a plausible
-        explanation for some differences, not a separately measured cause.
-  \item The local DIMACS files were count-checked after reconstruction but
-        were not verified arc by arc against the official files.
+  \item Three timed repetitions characterize observed variation for one
+        deterministic query set. More repetitions and independently sampled
+        pairs would support broader comparisons.
+  \item Heap order rotates by dataset but stays fixed across repetitions.
+        CPU frequency, thermal state, and background load were not locked.
+        The min--max ranges are descriptive, not confidence intervals.
+  \item Legacy internal counters describe an earlier implementation and
+        provide structural context. They are not measurements of individual
+        operation latency or a precise breakdown of the current CPU times.
+  \item Only three sparse road networks were timed. Dense graphs and full
+        single-source searches may have a different operation mix.
+  \item Cache misses, branch behavior, and pointer-access costs were not
+        profiled. Memory-locality explanations are interpretations of the
+        structures and observations.
+  \item The reconstructed graph files were count-checked but were not
+        verified arc by arc against official files.
 \end{enumerate}
 
-Useful next measurements would include multiple timed repetitions, full
-single-source queries, more road networks, and hardware profiling. They may
-change the operation mix or clarify which low-level costs explain the
-observed differences.
-
 \section{Summary}
-On the three tested road networks, binary and ternary heaps were faster than
-the current Fibonacci and binomial implementations for the measured
-point-to-point workload. Successful decrease-key was a small share of queue
-operations, while extract-min occurred hundreds of millions of times across
-the query batches. This operation mix helps explain why Fibonacci's amortized
-decrease-key advantage did not dominate the total runtime. The binary and
-ternary results were close, and the single-run measurements do not establish
-a stable winner between them. These conclusions apply to the recorded
-implementations and query workload; different graph structures or query
-patterns may lead to different results.
+In the three-run local experiment, ternary had the lowest median runtime on
+NY, COL, and FLA, followed by binary, binomial, and Fibonacci. All measured
+runs used identical queries and performed identical high-level graph work;
+independent synthetic tests also matched a reference oracle.
+The small active queues, low proportion of successful decrease-key calls,
+and substantial linked-tree maintenance explain why asymptotic heap bounds
+alone do not predict the measured ranking. The conclusions apply to this
+source, machine, compiler, and query distribution.
 
 \chapter*{References}
 \addcontentsline{toc}{chapter}{References}
@@ -669,11 +648,18 @@ focuses on their measured performance consequences.
 
 Recorded files include:
 \begin{itemize}
-  \item Timings: \path{results/benchmark_results.csv}.
+  \item Median timings: \path{results/benchmark_results.csv}.
+  \item Raw repetitions: \path{results/benchmark_repetitions.csv}.
+  \item Timing statistics: \path{results/benchmark_statistics.csv}.
   \item Queries: \path{results/benchmark_queries.csv}.
-  \item Dijkstra operation counts: \path{results/benchmark_operations.csv}.
-  \item Legacy heap counters: \path{results/heap_internal_stats.csv}.
-  \item Performance analysis: \path{docs/heap_performance_analysis.md}.
+  \item Dijkstra work: \path{results/benchmark_operations.csv}.
+  \item Legacy counters: \path{results/heap_internal_stats.csv}.
+  \item Environment: \path{results/benchmark_environment.json}.
+  \item Oracle checks: \path{results/reference_checks.json}.
+  \item Run log: \path{results/benchmark_reproduction.log}.
 \end{itemize}
+The full timed experiment is reproduced with
+\path{scripts/reproduce_benchmark.py}; the separate synthetic reference check
+is in \path{scripts/check_shortest_paths.py}.
 
 \end{document}

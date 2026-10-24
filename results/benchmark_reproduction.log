@@ -1,0 +1,84 @@
+2026-10-24T21:36:20.584029+00:00 START warmup
+NY: 264346 vertices, 733846 arcs, 1000 queries
+  Binary heap:    12.682 s (12.682 ms/query)
+  Ternary heap:   11.589 s (11.589 ms/query)
+  Fibonacci heap: 24.173 s (24.173 ms/query)
+  Binomial heap:  21.753 s (21.753 ms/query)
+  Matching answers: 1000/1000
+COL: 435666 vertices, 1057066 arcs, 1000 queries
+  Binary heap:    20.412 s (20.412 ms/query)
+  Ternary heap:   19.028 s (19.028 ms/query)
+  Fibonacci heap: 38.041 s (38.041 ms/query)
+  Binomial heap:  33.458 s (33.458 ms/query)
+  Matching answers: 1000/1000
+FLA: 1070376 vertices, 2712798 arcs, 1000 queries
+  Binary heap:    52.172 s (52.172 ms/query)
+  Ternary heap:   47.416 s (47.416 ms/query)
+  Fibonacci heap: 96.717 s (96.717 ms/query)
+  Binomial heap:  85.858 s (85.858 ms/query)
+  Matching answers: 1000/1000
+Saved results/benchmark_results.csv, results/benchmark_queries.csv, and results/benchmark_operations.csv
+END warmup
+2026-10-24T21:44:10.165110+00:00 START round_01
+NY: 264346 vertices, 733846 arcs, 1000 queries
+  Binary heap:    12.744 s (12.744 ms/query)
+  Ternary heap:   11.647 s (11.647 ms/query)
+  Fibonacci heap: 24.264 s (24.264 ms/query)
+  Binomial heap:  21.822 s (21.822 ms/query)
+  Matching answers: 1000/1000
+COL: 435666 vertices, 1057066 arcs, 1000 queries
+  Binary heap:    20.662 s (20.662 ms/query)
+  Ternary heap:   18.950 s (18.950 ms/query)
+  Fibonacci heap: 37.767 s (37.767 ms/query)
+  Binomial heap:  33.708 s (33.708 ms/query)
+  Matching answers: 1000/1000
+FLA: 1070376 vertices, 2712798 arcs, 1000 queries
+  Binary heap:    51.370 s (51.370 ms/query)
+  Ternary heap:   47.067 s (47.067 ms/query)
+  Fibonacci heap: 96.150 s (96.150 ms/query)
+  Binomial heap:  85.851 s (85.851 ms/query)
+  Matching answers: 1000/1000
+Saved results/benchmark_results.csv, results/benchmark_queries.csv, and results/benchmark_operations.csv
+END round_01
+2026-10-24T21:51:56.287277+00:00 START round_02
+NY: 264346 vertices, 733846 arcs, 1000 queries
+  Binary heap:    12.767 s (12.767 ms/query)
+  Ternary heap:   11.608 s (11.608 ms/query)
+  Fibonacci heap: 24.263 s (24.263 ms/query)
+  Binomial heap:  21.904 s (21.904 ms/query)
+  Matching answers: 1000/1000
+COL: 435666 vertices, 1057066 arcs, 1000 queries
+  Binary heap:    20.584 s (20.584 ms/query)
+  Ternary heap:   18.823 s (18.823 ms/query)
+  Fibonacci heap: 37.621 s (37.621 ms/query)
+  Binomial heap:  33.759 s (33.759 ms/query)
+  Matching answers: 1000/1000
+FLA: 1070376 vertices, 2712798 arcs, 1000 queries
+  Binary heap:    51.513 s (51.513 ms/query)
+  Ternary heap:   47.112 s (47.112 ms/query)
+  Fibonacci heap: 95.916 s (95.916 ms/query)
+  Binomial heap:  86.079 s (86.079 ms/query)
+  Matching answers: 1000/1000
+Saved results/benchmark_results.csv, results/benchmark_queries.csv, and results/benchmark_operations.csv
+END round_02
+2026-10-24T21:59:42.351622+00:00 START round_03
+NY: 264346 vertices, 733846 arcs, 1000 queries
+  Binary heap:    12.688 s (12.688 ms/query)
+  Ternary heap:   11.569 s (11.569 ms/query)
+  Fibonacci heap: 24.267 s (24.267 ms/query)
+  Binomial heap:  21.850 s (21.850 ms/query)
+  Matching answers: 1000/1000
+COL: 435666 vertices, 1057066 arcs, 1000 queries
+  Binary heap:    20.482 s (20.482 ms/query)
+  Ternary heap:   18.787 s (18.787 ms/query)
+  Fibonacci heap: 37.968 s (37.968 ms/query)
+  Binomial heap:  33.631 s (33.631 ms/query)
+  Matching answers: 1000/1000
+FLA: 1070376 vertices, 2712798 arcs, 1000 queries
+  Binary heap:    51.790 s (51.790 ms/query)
+  Ternary heap:   47.963 s (47.963 ms/query)
+  Fibonacci heap: 96.385 s (96.385 ms/query)
+  Binomial heap:  85.570 s (85.570 ms/query)
+  Matching answers: 1000/1000
+Saved results/benchmark_results.csv, results/benchmark_queries.csv, and results/benchmark_operations.csv
+END round_03

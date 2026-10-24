@@ -46,6 +46,23 @@ The plot is saved as results/benchmark_runtime.png.
 - results/benchmark_queries.csv: the 1,000 query pairs per dataset and the distance returned by each heap.
 - results/benchmark_operations.csv: high-level Dijkstra work, including scanned arcs, settled vertices, inserts, extract-min operations, and successful decrease-key operations.
 - results/heap_internal_stats.csv: detailed heap-operation counts, described below.
+- results/benchmark_repetitions.csv: raw timings from all three measured repetitions.
+- results/benchmark_statistics.csv: median, mean, minimum, maximum, and sample standard deviation for each dataset and heap.
+- results/benchmark_environment.json: machine, compiler, build flags, and input/source hashes for the local reproduction.
+- results/benchmark_reproduction.log: output from the complete warm-up and three accepted measured rounds.
+
+## Reproduce the repeated experiment on macOS
+
+With Python 3.11 or newer and Apple Clang installed, run:
+
+    python3 scripts/reproduce_benchmark.py
+    python3 scripts/plot_benchmark.py
+
+The reproduction script compiles the unchanged C implementation with `-std=c11 -O2 -Wall -Wextra`. It runs one complete warm-up and three sequential measured rounds. Each round uses the same 1,000 distinct query pairs per graph. Warm-up timings are excluded from the summary. The script checks query uniqueness, agreement among all four answers, and identical queries and high-level work across rounds before publishing results. The existing `heap_internal_stats.csv` remains legacy counting data and is explicitly labeled that way in the report; it was not recollected in this local timing experiment.
+
+`benchmark_results.csv` stores the per-heap median of the three measured batch times. The runtime plot uses those medians with observed minimum-to-maximum whiskers; these are not confidence intervals. Temporary binaries and individual pass files remain under the ignored `build/` directory. This full experiment runs sequentially and can take tens of minutes. Completed passes can be revalidated and summarized without rerunning them using `python3 scripts/reproduce_benchmark.py --summarize-existing build/reproduce-<run-id>`.
+
+An independent correctness check is available with `python3 scripts/check_shortest_paths.py`. It compares 3,000 queries on three synthetic 40-vertex graphs against a separate Python Floyd-Warshall implementation, including unreachable pairs, zero-weight/parallel edges, and distances above 32-bit range. These fixtures are separate from the USA road-network timing inputs. The summary is written to `results/reference_checks.json`.
 
 ## Counting heap operations
 
